@@ -4,6 +4,7 @@ import re
 import json
 import time
 import os
+from datetime import datetime
 
 # === INPUT ===
 urls = [
@@ -11,7 +12,7 @@ urls = [
     "https://www.bbc.com/news/health",
     "https://www3.nhk.or.jp/nhkworld/en/news/list/",
     "https://www.cbc.ca/news/health",
-    "https://www.reuters.com/business/healthcare-pharmaceuticals/"
+    "https://www.cidrap.umn.edu/all-news"
 ]
 
 keywords = ["outbreak", "epidemic", "pandemic", "virus", "viral", "bacteria", "bacterial", "infection", "infectious",
@@ -24,6 +25,8 @@ keywords = ["outbreak", "epidemic", "pandemic", "virus", "viral", "bacteria", "b
     "test", "testing positive", "rapid test", "lockdown", "restrictions", "travel ban", "health mandate",
     "curfew", "surge", "spike", "flatten the curve", "mortality rate", "hospitalization", "symptoms", "variant",
     "mutation", "strain", "asymptomatic", "incubation", "reinfection", "antibodies", "herd immunity", "R0", "drug resistance"]
+
+header_tags = {"h1", "h2", "h3", "h4"}
 
 # === HELPERS ===
 def tag_visible(element):
@@ -39,11 +42,9 @@ def sanitize_filename(url):
 def scrape_with_playwright(urls, keywords):
     matches = []
 
-    # Ensure screenshot folder exists
-    os.makedirs("screenshots", exist_ok=True)
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)  # Set to False for debugging
+        browser = p.chromium.launch(headless=False)
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             viewport={"width": 1280, "height": 800},
@@ -51,20 +52,16 @@ def scrape_with_playwright(urls, keywords):
             locale="en-US"
         )
         page = context.new_page()
-
-        # Anti-bot evasion: hide 'navigator.webdriver'
-        page.add_init_script("""Object.defineProperty(navigator, 'webdriver', {get: () => undefined})""")
+        page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
         for url in urls:
             print(f"\n🔗 Scanning: {url}")
             try:
-                page.goto(url, timeout=60000, wait_until='domcontentloaded')
-                page.wait_for_timeout(5000)  # wait for JS to load (5s)
+                matched_keywords_in_headers = set()
 
-                # Screenshot for debugging
-                filename = f"screenshots/screenshot_{sanitize_filename(url)}.png"
-                page.screenshot(path=filename, full_page=True)
-                print(f"📸 Screenshot saved to {filename}")
+                page.goto(url, timeout=60000, wait_until='domcontentloaded')
+                page.wait_for_timeout(5000)
+
 
                 html = page.content()
                 soup = BeautifulSoup(html, 'html.parser')
@@ -75,15 +72,30 @@ def scrape_with_playwright(urls, keywords):
                     clean = text.strip()
                     if not clean:
                         continue
+
                     for kw in keywords:
                         if re.search(rf'\b{re.escape(kw)}\b', clean, re.IGNORECASE):
-                            print(f"✅ {clean} (matched: {kw})")
-                            matches.append({
+                            tag_name = text.parent.name.lower()
+
+                            # Skip if same keyword was already captured in a header tag
+                            if kw in matched_keywords_in_headers and tag_name not in header_tags:
+                                print(f"⏭️ Skipped '{kw}' in <{tag_name}> (already matched in header): {clean}")
+                                break
+
+                            print(f"✅ {clean} (matched: {kw}) from <{tag_name}>")
+                            match_record = {
                                 'url': url,
                                 'text': clean,
-                                'keyword': kw
-                            })
+                                'keyword': kw,
+                                'tag': tag_name
+                            }
+                            matches.append(match_record)
+
+                            if tag_name in header_tags:
+                                matched_keywords_in_headers.add(kw)
+
                             break
+
             except Exception as e:
                 print(f"❌ Error with {url}: {e}")
                 matches.append({
@@ -98,8 +110,10 @@ def scrape_with_playwright(urls, keywords):
 if __name__ == "__main__":
     results = scrape_with_playwright(urls, keywords)
 
-    output_file = "keyword_headlines.json"
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    output_file = f"keyword_headlines_{timestamp}.json"
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
 
     print(f"\n📝 Results saved to: {output_file}")
+
