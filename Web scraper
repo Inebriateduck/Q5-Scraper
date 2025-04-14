@@ -7,24 +7,12 @@ import os
 from datetime import datetime
 
 # === INPUT ===
+# target URLS here
 urls = [
-    "https://www.cnn.com/health",
-    "https://www.bbc.com/news/health",
-    "https://www3.nhk.or.jp/nhkworld/en/news/list/",
-    "https://www.cbc.ca/news/health",
-    "https://www.cidrap.umn.edu/all-news"
-]
 
-keywords = ["outbreak", "epidemic", "pandemic", "virus", "viral", "bacteria", "bacterial", "infection", "infectious",
-    "contagious", "transmissible", "zoonotic", "pathogen", "case", "cases", "confirmed case", "suspected case",
-    "health alert", "health emergency", "public health", "health officials", "CDC", "WHO", "NIH", "quarantine",
-    "isolation", "incubation period", "superspreader", "cluster", "contact tracing", "COVID", "COVID-19",
-    "coronavirus", "novel coronavirus", "SARS", "SARS-CoV-2", "MERS", "Ebola", "Marburg", "Mpox", "Monkeypox",
-    "Influenza", "flu", "H1N1", "avian flu", "bird flu", "swine flu", "tuberculosis", "TB", "measles", "dengue",
-    "Zika", "norovirus", "cholera", "polio", "malaria", "vaccination", "vaccine", "booster shot", "immunization",
-    "test", "testing positive", "rapid test", "lockdown", "restrictions", "travel ban", "health mandate",
-    "curfew", "surge", "spike", "flatten the curve", "mortality rate", "hospitalization", "symptoms", "variant",
-    "mutation", "strain", "asymptomatic", "incubation", "reinfection", "antibodies", "herd immunity", "R0", "drug resistance"]
+]
+# target keywords here
+keywords = []
 
 header_tags = {"h1", "h2", "h3", "h4"}
 
