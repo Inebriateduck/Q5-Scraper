@@ -1,0 +1,105 @@
+from playwright.sync_api import sync_playwright
+from bs4 import BeautifulSoup, Comment
+import re
+import json
+import time
+import os
+
+# === INPUT ===
+urls = [
+    "https://www.cnn.com/health",
+    "https://www.bbc.com/news/health",
+    "https://www3.nhk.or.jp/nhkworld/en/news/list/",
+    "https://www.cbc.ca/news/health",
+    "https://www.reuters.com/business/healthcare-pharmaceuticals/"
+]
+
+keywords = ["outbreak", "epidemic", "pandemic", "virus", "viral", "bacteria", "bacterial", "infection", "infectious",
+    "contagious", "transmissible", "zoonotic", "pathogen", "case", "cases", "confirmed case", "suspected case",
+    "health alert", "health emergency", "public health", "health officials", "CDC", "WHO", "NIH", "quarantine",
+    "isolation", "incubation period", "superspreader", "cluster", "contact tracing", "COVID", "COVID-19",
+    "coronavirus", "novel coronavirus", "SARS", "SARS-CoV-2", "MERS", "Ebola", "Marburg", "Mpox", "Monkeypox",
+    "Influenza", "flu", "H1N1", "avian flu", "bird flu", "swine flu", "tuberculosis", "TB", "measles", "dengue",
+    "Zika", "norovirus", "cholera", "polio", "malaria", "vaccination", "vaccine", "booster shot", "immunization",
+    "test", "testing positive", "rapid test", "lockdown", "restrictions", "travel ban", "health mandate",
+    "curfew", "surge", "spike", "flatten the curve", "mortality rate", "hospitalization", "symptoms", "variant",
+    "mutation", "strain", "asymptomatic", "incubation", "reinfection", "antibodies", "herd immunity", "R0", "drug resistance"]
+
+# === HELPERS ===
+def tag_visible(element):
+    if element.parent.name in ['style', 'script', 'head', 'title', 'meta', '[document]', 'noscript']:
+        return False
+    if isinstance(element, Comment):
+        return False
+    return True
+
+def sanitize_filename(url):
+    return url.replace("https://", "").replace("http://", "").replace("/", "_")
+
+def scrape_with_playwright(urls, keywords):
+    matches = []
+
+    # Ensure screenshot folder exists
+    os.makedirs("screenshots", exist_ok=True)
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=False)  # Set to False for debugging
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            viewport={"width": 1280, "height": 800},
+            java_script_enabled=True,
+            locale="en-US"
+        )
+        page = context.new_page()
+
+        # Anti-bot evasion: hide 'navigator.webdriver'
+        page.add_init_script("""Object.defineProperty(navigator, 'webdriver', {get: () => undefined})""")
+
+        for url in urls:
+            print(f"\n🔗 Scanning: {url}")
+            try:
+                page.goto(url, timeout=60000, wait_until='domcontentloaded')
+                page.wait_for_timeout(5000)  # wait for JS to load (5s)
+
+                # Screenshot for debugging
+                filename = f"screenshots/screenshot_{sanitize_filename(url)}.png"
+                page.screenshot(path=filename, full_page=True)
+                print(f"📸 Screenshot saved to {filename}")
+
+                html = page.content()
+                soup = BeautifulSoup(html, 'html.parser')
+                texts = soup.find_all(string=True)
+                visible_texts = filter(tag_visible, texts)
+
+                for text in visible_texts:
+                    clean = text.strip()
+                    if not clean:
+                        continue
+                    for kw in keywords:
+                        if re.search(rf'\b{re.escape(kw)}\b', clean, re.IGNORECASE):
+                            print(f"✅ {clean} (matched: {kw})")
+                            matches.append({
+                                'url': url,
+                                'text': clean,
+                                'keyword': kw
+                            })
+                            break
+            except Exception as e:
+                print(f"❌ Error with {url}: {e}")
+                matches.append({
+                    'url': url,
+                    'error': str(e)
+                })
+
+        browser.close()
+    return matches
+
+# === MAIN RUN ===
+if __name__ == "__main__":
+    results = scrape_with_playwright(urls, keywords)
+
+    output_file = "keyword_headlines.json"
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2, ensure_ascii=False)
+
+    print(f"\n📝 Results saved to: {output_file}")
